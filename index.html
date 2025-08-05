@@ -1010,9 +1010,14 @@
                             <i class="fas fa-cloud-upload-alt" style="font-size: 3rem; color: #1D4D4F; margin-bottom: 1rem;"></i>
                             <p style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem;">ลากไฟล์ PDF มาวางที่นี่</p>
                             <p style="color: #666; margin-bottom: 1rem;">หรือ</p>
-                            <button type="button" class="upload-btn" onclick="document.getElementById('fileInput').click()">
-                                <i class="fas fa-folder-open"></i> เลือกไฟล์
-                            </button>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center;">
+                                <button type="button" class="upload-btn" onclick="checkFirebaseConnection()" style="background: #059669;">
+                                    <i class="fas fa-plug"></i> ทดสอบ Firebase
+                                </button>
+                                <button type="button" class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                                    <i class="fas fa-folder-open"></i> เลือกไฟล์
+                                </button>
+                            </div>
                             <input type="file" id="fileInput" accept=".pdf" style="display: none;">
                             <p style="color: #666; font-size: 0.8rem; margin-top: 1rem;">รองรับเฉพาะไฟล์ PDF ขนาดไม่เกิน 10MB</p>
                         </div>
@@ -1097,14 +1102,39 @@
 
         // ตรวจสอบการเชื่อมต่อ Firebase
         function checkFirebaseConnection() {
-            setTimeout(() => {
-                if (!window.db || !window.storage) {
-                    console.error('Firebase connection failed');
-                    alert('ไม่สามารถเชื่อมต่อ Firebase ได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต');
-                } else {
+            setTimeout(async () => {
+                try {
+                    if (!window.db || !window.storage) {
+                        console.error('Firebase connection failed');
+                        alert('ไม่สามารถเชื่อมต่อ Firebase ได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต');
+                        return;
+                    }
+                    
                     console.log('Firebase connected successfully');
+                    
+                    // ทดสอบการเชื่อมต่อ Firestore
+                    try {
+                        const { collection, getDocs } = window.firebaseFirestore;
+                        await getDocs(collection(db, 'test'));
+                        console.log('Firestore connection: OK');
+                    } catch (error) {
+                        console.error('Firestore connection failed:', error);
+                    }
+                    
+                    // ทดสอบการเชื่อมต่อ Storage
+                    try {
+                        const { ref } = window.firebaseStorage;
+                        ref(storage, 'test');
+                        console.log('Storage connection: OK');
+                    } catch (error) {
+                        console.error('Storage connection failed:', error);
+                    }
+                    
+                } catch (error) {
+                    console.error('Firebase initialization error:', error);
+                    alert('เกิดข้อผิดพลาดในการเชื่อมต่อ Firebase: ' + error.message);
                 }
-            }, 2000);
+            }, 3000);
         }
 
         // Load documents from Firestore
@@ -1316,6 +1346,13 @@
 
         async function uploadToFirebase(file) {
             try {
+                console.log('=== Starting Firebase Upload Process ===');
+                console.log('File details:', {
+                    name: file.name,
+                    size: file.size,
+                    type: file.type
+                });
+                
                 const { ref, uploadBytesResumable, getDownloadURL } = window.firebaseStorage;
                 
                 // ตรวจสอบว่า Firebase Storage พร้อมใช้งาน
@@ -1325,90 +1362,113 @@
                 
                 // สร้างชื่อไฟล์ที่ไม่ซ้ำกัน
                 const timestamp = Date.now();
-                const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+                const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+                const fileName = `${timestamp}_${safeName}`;
                 
-                console.log('Starting upload:', fileName);
+                console.log('Upload filename:', fileName);
                 
                 // สร้าง reference ไปยัง storage
                 const storageRef = ref(storage, `documents/${fileName}`);
+                console.log('Storage reference created successfully');
                 
                 // เริ่มการอัพโหลด
+                console.log('Starting upload task...');
                 const uploadTask = uploadBytesResumable(storageRef, file);
                 
-                // ติดตามความคืบหน้า
-                uploadTask.on('state_changed',
-                    // อัพเดทความคืบหน้า
-                    (snapshot) => {
-                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                        console.log('Upload progress:', progress + '%');
-                        
-                        const progressFill = document.getElementById('progressFill');
-                        const progressText = document.getElementById('progressText');
-                        
-                        if (progressFill) {
-                            progressFill.style.width = `${progress}%`;
-                        }
-                        if (progressText) {
-                            progressText.textContent = `${Math.round(progress)}%`;
-                        }
-                    },
-                    // จัดการข้อผิดพลาด
-                    (error) => {
-                        console.error('Upload error:', error);
-                        let errorMessage = 'เกิดข้อผิดพลาดในการอัพโหลด';
-                        
-                        switch (error.code) {
-                            case 'storage/unauthorized':
-                                errorMessage = 'ไม่มีสิทธิ์ในการอัพโหลดไฟล์';
-                                break;
-                            case 'storage/canceled':
-                                errorMessage = 'การอัพโหลดถูกยกเลิก';
-                                break;
-                            case 'storage/unknown':
-                                errorMessage = 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ';
-                                break;
-                            default:
-                                errorMessage = `เกิดข้อผิดพลาด: ${error.message}`;
-                        }
-                        
-                        alert(errorMessage);
-                        removeFile();
-                    },
-                    // เมื่ออัพโหลดเสร็จ
-                    async () => {
-                        try {
-                            console.log('Upload completed, getting download URL...');
-                            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                            uploadedFileUrl = downloadURL;
+                // Promise wrapper สำหรับ upload task
+                return new Promise((resolve, reject) => {
+                    uploadTask.on('state_changed',
+                        // อัพเดทความคืบหน้า
+                        (snapshot) => {
+                            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                            console.log('Upload progress:', Math.round(progress) + '%');
                             
-                            const progressText = document.getElementById('progressText');
                             const progressFill = document.getElementById('progressFill');
+                            const progressText = document.getElementById('progressText');
                             
-                            if (progressText) progressText.textContent = 'อัพโหลดสำเร็จ!';
-                            if (progressFill) progressFill.style.background = '#10b981';
+                            if (progressFill) {
+                                progressFill.style.width = `${progress}%`;
+                            }
+                            if (progressText) {
+                                progressText.textContent = `${Math.round(progress)}%`;
+                            }
+                        },
+                        // จัดการข้อผิดพลาด
+                        (error) => {
+                            console.error('=== Upload Error ===');
+                            console.error('Error code:', error.code);
+                            console.error('Error message:', error.message);
+                            console.error('Full error:', error);
                             
-                            // บันทึกข้อมูลไฟล์
-                            const fileData = {
-                                name: file.name,
-                                size: file.size,
-                                type: file.type,
-                                uploadedAt: new Date().toISOString(),
-                                downloadURL
-                            };
-                            console.log('File uploaded successfully:', fileData);
+                            let errorMessage = 'เกิดข้อผิดพลาดในการอัพโหลด';
                             
-                        } catch (error) {
-                            console.error('Error getting download URL:', error);
-                            alert('เกิดข้อผิดพลาดในการรับ URL: ' + error.message);
+                            switch (error.code) {
+                                case 'storage/unauthorized':
+                                    errorMessage = 'ไม่มีสิทธิ์ในการอัพโหลดไฟล์ - กรุณาตรวจสอบ Security Rules';
+                                    break;
+                                case 'storage/canceled':
+                                    errorMessage = 'การอัพโหลดถูกยกเลิก';
+                                    break;
+                                case 'storage/unknown':
+                                    errorMessage = 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ';
+                                    break;
+                                case 'storage/retry-limit-exceeded':
+                                    errorMessage = 'การอัพโหลดล้มเหลว - เครือข่ายไม่เสถียร';
+                                    break;
+                                default:
+                                    errorMessage = `เกิดข้อผิดพลาด: ${error.message}`;
+                            }
+                            
+                            alert(errorMessage);
                             removeFile();
+                            reject(error);
+                        },
+                        // เมื่ออัพโหลดเสร็จ
+                        async () => {
+                            try {
+                                console.log('=== Upload Completed ===');
+                                console.log('Getting download URL...');
+                                
+                                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                                uploadedFileUrl = downloadURL;
+                                
+                                console.log('Download URL obtained:', downloadURL);
+                                
+                                const progressText = document.getElementById('progressText');
+                                const progressFill = document.getElementById('progressFill');
+                                
+                                if (progressText) progressText.textContent = 'อัพโหลดสำเร็จ!';
+                                if (progressFill) progressFill.style.background = '#10b981';
+                                
+                                // บันทึกข้อมูลไฟล์
+                                const fileData = {
+                                    name: file.name,
+                                    size: file.size,
+                                    type: file.type,
+                                    uploadedAt: new Date().toISOString(),
+                                    downloadURL
+                                };
+                                console.log('=== Upload Success ===');
+                                console.log('File data:', fileData);
+                                
+                                resolve(downloadURL);
+                                
+                            } catch (error) {
+                                console.error('Error getting download URL:', error);
+                                alert('เกิดข้อผิดพลาดในการรับ URL: ' + error.message);
+                                removeFile();
+                                reject(error);
+                            }
                         }
-                    }
-                );
+                    );
+                });
                 
             } catch (error) {
-                console.error('Firebase upload error:', error);
-                alert('เกิดข้อผิดพลาดในการอัพโหลด: ' + error.message);
+                console.error('=== Firebase Upload Setup Error ===');
+                console.error('Error:', error);
+                alert('เกิดข้อผิดพลาดในการตั้งค่าการอัพโหลด: ' + error.message);
                 removeFile();
+                throw error;
             }
         }
 
@@ -1503,7 +1563,7 @@
                         <button class="action-btn edit-btn" onclick="editDocument('${doc.id}')">
                             <i class="fas fa-edit"></i> แก้ไข
                         </button>
-                        <button class="action-btn delete-btn" onclick="deleteDocument('${doc.id}', '${doc.title}')">>
+                        <button class="action-btn delete-btn" onclick="deleteDocument('${doc.id}', '${doc.title}')">
                             <i class="fas fa-trash"></i> ลบ
                         </button>
                     </div>
