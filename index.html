@@ -1041,14 +1041,14 @@
         let selectedFile = null;
         let uploadedFileUrl = null;
 
-        // Firebase Firestore variables
+        // Supabase variables
         let documents = [];
         let filteredDocuments = [];
         let editingId = null;
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
-            // ตรวจสอบ Firebase connection
+            // ตรวจสอบ Supabase connection
             checkSupabaseConnection();
             
             loadDocumentsFromSupabase();
@@ -1301,9 +1301,9 @@
                 return;
             }
             
-            // ตรวจสอบว่า Firebase พร้อมใช้งาน
-            if (!window.storage) {
-                alert('Firebase Storage ไม่พร้อมใช้งาน กรุณารีเฟรชหน้าและลองใหม่');
+            // ตรวจสอบว่า Supabase พร้อมใช้งาน
+            if (!window.supabaseClient) {
+                alert('Supabase ไม่พร้อมใช้งาน กรุณารีเฟรชหน้าและลองใหม่');
                 return;
             }
             
@@ -1768,38 +1768,54 @@
             }
         }
 
-        // เพิ่มฟังก์ชันสำหรับการ sync ข้อมูลแบบ real-time
+        // เพิ่มฟังก์ชันสำหรับการ sync ข้อมูลแบบ real-time (Supabase)
         function setupRealtimeListener() {
-            const { collection, onSnapshot } = window.firebaseFirestore;
-            const unsubscribe = onSnapshot(collection(db, 'documents'), (snapshot) => {
-                snapshot.docChanges().forEach((change) => {
-                    if (change.type === 'added') {
-                        const newDoc = { id: change.doc.id, ...change.doc.data() };
-                        const existingIndex = documents.findIndex(d => d.id === newDoc.id);
-                        if (existingIndex === -1) {
-                            documents.push(newDoc);
+            // Subscribe to changes in documents table
+            const subscription = window.supabaseClient
+                .channel('documents-changes')
+                .on('postgres_changes', 
+                    { 
+                        event: '*', 
+                        schema: 'public', 
+                        table: 'documents' 
+                    },
+                    (payload) => {
+                        console.log('Real-time change detected:', payload);
+                        
+                        switch (payload.eventType) {
+                            case 'INSERT':
+                                const newDoc = payload.new;
+                                const existingIndex = documents.findIndex(d => d.id === newDoc.id);
+                                if (existingIndex === -1) {
+                                    documents.push(newDoc);
+                                }
+                                break;
+                                
+                            case 'UPDATE':
+                                const updatedDoc = payload.new;
+                                const updateIndex = documents.findIndex(d => d.id === updatedDoc.id);
+                                if (updateIndex !== -1) {
+                                    documents[updateIndex] = updatedDoc;
+                                }
+                                break;
+                                
+                            case 'DELETE':
+                                const deletedDoc = payload.old;
+                                const deleteIndex = documents.findIndex(d => d.id === deletedDoc.id);
+                                if (deleteIndex !== -1) {
+                                    documents.splice(deleteIndex, 1);
+                                }
+                                break;
                         }
+                        
+                        filterDocuments();
+                        updateStats();
                     }
-                    if (change.type === 'modified') {
-                        const updatedDoc = { id: change.doc.id, ...change.doc.data() };
-                        const index = documents.findIndex(d => d.id === updatedDoc.id);
-                        if (index !== -1) {
-                            documents[index] = updatedDoc;
-                        }
-                    }
-                    if (change.type === 'removed') {
-                        const index = documents.findIndex(d => d.id === change.doc.id);
-                        if (index !== -1) {
-                            documents.splice(index, 1);
-                        }
-                    }
-                });
-                filterDocuments();
-                updateStats();
-            });
+                )
+                .subscribe();
             
             // Return unsubscribe function for cleanup
-            return unsubscribe;
+            return () => subscription.unsubscribe();
         }
         
         // เพิ่มฟังก์ชันแสดงคีย์ลัด
