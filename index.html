@@ -1084,6 +1084,9 @@
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
+            // ตรวจสอบ Firebase connection
+            checkFirebaseConnection();
+            
             loadDocumentsFromFirestore();
             setupEventListeners();
             loadDraft(); // Load auto-saved draft if available
@@ -1091,6 +1094,18 @@
             // เปิดใช้งาน real-time listener (เฉพาะเมื่อต้องการ sync แบบ real-time)
             // setupRealtimeListener();
         });
+
+        // ตรวจสอบการเชื่อมต่อ Firebase
+        function checkFirebaseConnection() {
+            setTimeout(() => {
+                if (!window.db || !window.storage) {
+                    console.error('Firebase connection failed');
+                    alert('ไม่สามารถเชื่อมต่อ Firebase ได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต');
+                } else {
+                    console.log('Firebase connected successfully');
+                }
+            }, 2000);
+        }
 
         // Load documents from Firestore
         async function loadDocumentsFromFirestore() {
@@ -1273,6 +1288,8 @@
         }
 
         async function handleFile(file) {
+            console.log('Handling file:', file.name, 'Size:', file.size, 'Type:', file.type);
+            
             if (file.type !== 'application/pdf') {
                 alert('กรุณาเลือกไฟล์ PDF เท่านั้น');
                 return;
@@ -1284,8 +1301,16 @@
                 return;
             }
             
+            // ตรวจสอบว่า Firebase พร้อมใช้งาน
+            if (!window.storage) {
+                alert('Firebase Storage ไม่พร้อมใช้งาน กรุณารีเฟรชหน้าและลองใหม่');
+                return;
+            }
+            
             selectedFile = file;
             showFilePreview(file);
+            
+            console.log('Starting upload process...');
             await uploadToFirebase(file);
         }
 
@@ -1293,9 +1318,16 @@
             try {
                 const { ref, uploadBytesResumable, getDownloadURL } = window.firebaseStorage;
                 
+                // ตรวจสอบว่า Firebase Storage พร้อมใช้งาน
+                if (!storage) {
+                    throw new Error('Firebase Storage ไม่พร้อมใช้งาน');
+                }
+                
                 // สร้างชื่อไฟล์ที่ไม่ซ้ำกัน
                 const timestamp = Date.now();
-                const fileName = `${timestamp}_${file.name}`;
+                const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+                
+                console.log('Starting upload:', fileName);
                 
                 // สร้าง reference ไปยัง storage
                 const storageRef = ref(storage, `documents/${fileName}`);
@@ -1308,22 +1340,52 @@
                     // อัพเดทความคืบหน้า
                     (snapshot) => {
                         const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                        document.getElementById('progressFill').style.width = `${progress}%`;
-                        document.getElementById('progressText').textContent = `${Math.round(progress)}%`;
+                        console.log('Upload progress:', progress + '%');
+                        
+                        const progressFill = document.getElementById('progressFill');
+                        const progressText = document.getElementById('progressText');
+                        
+                        if (progressFill) {
+                            progressFill.style.width = `${progress}%`;
+                        }
+                        if (progressText) {
+                            progressText.textContent = `${Math.round(progress)}%`;
+                        }
                     },
                     // จัดการข้อผิดพลาด
                     (error) => {
                         console.error('Upload error:', error);
-                        alert(`เกิดข้อผิดพลาดในการอัพโหลด: ${error.message}`);
+                        let errorMessage = 'เกิดข้อผิดพลาดในการอัพโหลด';
+                        
+                        switch (error.code) {
+                            case 'storage/unauthorized':
+                                errorMessage = 'ไม่มีสิทธิ์ในการอัพโหลดไฟล์';
+                                break;
+                            case 'storage/canceled':
+                                errorMessage = 'การอัพโหลดถูกยกเลิก';
+                                break;
+                            case 'storage/unknown':
+                                errorMessage = 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ';
+                                break;
+                            default:
+                                errorMessage = `เกิดข้อผิดพลาด: ${error.message}`;
+                        }
+                        
+                        alert(errorMessage);
                         removeFile();
                     },
                     // เมื่ออัพโหลดเสร็จ
                     async () => {
                         try {
+                            console.log('Upload completed, getting download URL...');
                             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
                             uploadedFileUrl = downloadURL;
-                            document.getElementById('progressText').textContent = 'อัพโหลดสำเร็จ!';
-                            document.getElementById('progressFill').style.background = '#10b981';
+                            
+                            const progressText = document.getElementById('progressText');
+                            const progressFill = document.getElementById('progressFill');
+                            
+                            if (progressText) progressText.textContent = 'อัพโหลดสำเร็จ!';
+                            if (progressFill) progressFill.style.background = '#10b981';
                             
                             // บันทึกข้อมูลไฟล์
                             const fileData = {
@@ -1338,6 +1400,7 @@
                         } catch (error) {
                             console.error('Error getting download URL:', error);
                             alert('เกิดข้อผิดพลาดในการรับ URL: ' + error.message);
+                            removeFile();
                         }
                     }
                 );
@@ -1350,23 +1413,40 @@
         }
 
         function showFilePreview(file) {
-            document.querySelector('.drop-zone-content').style.display = 'none';
-            document.getElementById('filePreview').style.display = 'block';
+            const dropZoneContent = document.querySelector('.drop-zone-content');
+            const filePreview = document.getElementById('filePreview');
+            const fileName = document.getElementById('fileName');
+            const fileSize = document.getElementById('fileSize');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
             
-            document.getElementById('fileName').textContent = file.name;
-            document.getElementById('fileSize').textContent = formatFileSize(file.size);
+            if (dropZoneContent) dropZoneContent.style.display = 'none';
+            if (filePreview) filePreview.style.display = 'block';
+            
+            if (fileName) fileName.textContent = file.name;
+            if (fileSize) fileSize.textContent = formatFileSize(file.size);
             
             // Reset progress
-            document.getElementById('progressFill').style.width = '0%';
-            document.getElementById('progressText').textContent = '0%';
+            if (progressFill) {
+                progressFill.style.width = '0%';
+                progressFill.style.background = '#1D4D4F'; // Reset color
+            }
+            if (progressText) progressText.textContent = '0%';
         }
 
         function removeFile() {
             selectedFile = null;
             uploadedFileUrl = null;
-            document.querySelector('.drop-zone-content').style.display = 'block';
-            document.getElementById('filePreview').style.display = 'none';
-            document.getElementById('fileInput').value = '';
+            
+            const dropZoneContent = document.querySelector('.drop-zone-content');
+            const filePreview = document.getElementById('filePreview');
+            const fileInput = document.getElementById('fileInput');
+            const progressFill = document.getElementById('progressFill');
+            
+            if (dropZoneContent) dropZoneContent.style.display = 'block';
+            if (filePreview) filePreview.style.display = 'none';
+            if (fileInput) fileInput.value = '';
+            if (progressFill) progressFill.style.background = '#1D4D4F'; // Reset color
         }
 
         function formatFileSize(bytes) {
@@ -1420,10 +1500,10 @@
                         <button class="action-btn view-btn" onclick="viewDocument('${doc.link}')">
                             <i class="fas fa-eye"></i> ดูเอกสาร
                         </button>
-                        <button class="action-btn edit-btn" onclick="editDocument(${doc.id})">
+                        <button class="action-btn edit-btn" onclick="editDocument('${doc.id}')">
                             <i class="fas fa-edit"></i> แก้ไข
                         </button>
-                        <button class="action-btn delete-btn" onclick="deleteDocument(${doc.id}, '${doc.title}')">
+                        <button class="action-btn delete-btn" onclick="deleteDocument('${doc.id}', '${doc.title}')">>
                             <i class="fas fa-trash"></i> ลบ
                         </button>
                     </div>
@@ -1712,5 +1792,5 @@
             helper.style.display = helper.style.display === 'none' ? 'block' : 'none';
         }
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96a2b37f121b7329',t:'MTc1NDM1OTIyOS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
