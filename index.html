@@ -892,6 +892,30 @@
         </div>
     </div>
 
+    <!-- Document Viewer Modal -->
+    <div id="documentViewerModal" class="modal">
+        <div class="modal-content" style="max-width: 90%; max-height: 90%; padding: 1rem;">
+            <div class="modal-header" style="margin-bottom: 1rem; padding-bottom: 1rem;">
+                <h2 class="modal-title" id="viewerModalTitle">ดูเอกสาร</h2>
+                <span class="close" onclick="closeViewerModal()">&times;</span>
+            </div>
+            <div style="height: calc(100vh - 200px); overflow: hidden;">
+                <iframe id="documentFrame" 
+                        style="width: 100%; height: 100%; border: none; border-radius: 8px;" 
+                        src="">
+                </iframe>
+            </div>
+            <div style="margin-top: 1rem; text-align: center;">
+                <button class="upload-btn" onclick="openInNewTab()" style="margin-right: 0.5rem;">
+                    <i class="fas fa-external-link-alt"></i> เปิดในแท็บใหม่
+                </button>
+                <button class="btn-cancel" onclick="closeViewerModal()">
+                    ปิด
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Add/Edit Document Modal -->
     <div id="documentModal" class="modal">
         <div class="modal-content">
@@ -1040,6 +1064,7 @@
         // File upload variables
         let selectedFile = null;
         let uploadedFileUrl = null;
+        let currentDocumentUrl = null; // Store current viewing document URL
 
         // Supabase variables
         let documents = [];
@@ -1193,7 +1218,12 @@
             document.addEventListener('keydown', function(e) {
                 // Close modal with Escape key
                 if (e.key === 'Escape') {
-                    closeModal();
+                    // Close viewer modal first if it's open
+                    if (document.getElementById('documentViewerModal').style.display === 'block') {
+                        closeViewerModal();
+                    } else {
+                        closeModal();
+                    }
                 }
                 
                 // Open add modal with Ctrl/Cmd + N
@@ -1506,7 +1536,7 @@
                         </div>
                     </div>
                     <div class="document-actions">
-                        <button class="action-btn view-btn" onclick="viewDocument('${doc.link}')">
+                        <button class="action-btn view-btn" onclick="viewDocument('${doc.link}', '${doc.title.replace(/'/g, "\\'")}')">
                             <i class="fas fa-eye"></i> ดูเอกสาร
                         </button>
                         <button class="action-btn edit-btn" onclick="editDocument('${doc.id}')">
@@ -1663,14 +1693,54 @@
             }
         }
 
-        function viewDocument(link) {
-            // Convert Google Drive link to viewable format
+        function viewDocument(link, title = 'ดูเอกสาร') {
+            currentDocumentUrl = link;
+            
+            // Set modal title
+            document.getElementById('viewerModalTitle').textContent = title;
+            
+            // Get iframe element
+            const iframe = document.getElementById('documentFrame');
+            
+            // Check if it's a Google Drive link
             const fileId = link.match(/\/d\/([a-zA-Z0-9-_]+)/);
+            let viewUrl = link;
+            
             if (fileId) {
-                const viewLink = `https://drive.google.com/file/d/${fileId[1]}/preview`;
-                window.open(viewLink, '_blank');
-            } else {
-                window.open(link, '_blank');
+                // Convert Google Drive link to embeddable format
+                viewUrl = `https://drive.google.com/file/d/${fileId[1]}/preview`;
+            } else if (link.includes('supabase')) {
+                // For Supabase storage files, use direct URL
+                viewUrl = link;
+            }
+            
+            // Set iframe source
+            iframe.src = viewUrl;
+            
+            // Show modal
+            document.getElementById('documentViewerModal').style.display = 'block';
+            
+            console.log('Opening document viewer for:', viewUrl);
+        }
+
+        function closeViewerModal() {
+            const iframe = document.getElementById('documentFrame');
+            iframe.src = ''; // Clear iframe source to stop loading
+            document.getElementById('documentViewerModal').style.display = 'none';
+            currentDocumentUrl = null;
+        }
+
+        function openInNewTab() {
+            if (currentDocumentUrl) {
+                // For Google Drive links, use view format instead of preview
+                const fileId = currentDocumentUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+                let newTabUrl = currentDocumentUrl;
+                
+                if (fileId) {
+                    newTabUrl = `https://drive.google.com/file/d/${fileId[1]}/view`;
+                }
+                
+                window.open(newTabUrl, '_blank');
             }
         }
 
@@ -1709,9 +1779,15 @@
 
         // Close modal when clicking outside
         window.onclick = function(event) {
-            const modal = document.getElementById('documentModal');
-            if (event.target === modal) {
+            const documentModal = document.getElementById('documentModal');
+            const viewerModal = document.getElementById('documentViewerModal');
+            
+            if (event.target === documentModal) {
                 closeModal();
+            }
+            
+            if (event.target === viewerModal) {
+                closeViewerModal();
             }
         }
 
