@@ -776,60 +776,19 @@
             }
         }
     </style>
-    <script type="module">
-        // Import Firebase SDK v9
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { getFirestore } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-        import { getStorage } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js";
-        import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics.js";
-        import { 
-            collection, 
-            addDoc, 
-            getDocs, 
-            doc, 
-            updateDoc, 
-            deleteDoc, 
-            orderBy, 
-            query,
-            onSnapshot 
-        } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-        import { 
-            ref, 
-            uploadBytes, 
-            getDownloadURL,
-            uploadBytesResumable 
-        } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js";
-
-        // Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyAJ0rbhtYx3vkwrpj54xP5DhY0-8NYn6LI",
-            authDomain: "official-document-a4ec9.firebaseapp.com",
-            databaseURL: "https://official-document-a4ec9-default-rtdb.asia-southeast1.firebasedatabase.app",
-            projectId: "official-document-a4ec9",
-            storageBucket: "official-document-a4ec9.firebasestorage.app",
-            messagingSenderId: "1017390542123",
-            appId: "1:1017390542123:web:33146b38008dace781a96e",
-            measurementId: "G-B7WCZ39Q7B"
-        };
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const analytics = getAnalytics(app);
-
-        // Initialize Firebase services
-        const db = getFirestore(app);
-        const storage = getStorage(app);
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        // Supabase configuration - กรุณาแทนที่ด้วยข้อมูลจากโปรเจค Supabase ของคุณ
+        const SUPABASE_URL = 'https://snqkcpoqxkxdapjiymne.supabase.co'
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNucWtjcG9xeGt4ZGFwaml5bW5lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQzNzk0MDksImV4cCI6MjA2OTk1NTQwOX0.fCCpm3YABkzXi3a4cDgT49gAOGReasHYuCPhEqob3JQ'
         
-        // Make Firebase services available globally
-        window.db = db;
-        window.storage = storage;
-        window.analytics = analytics;
-        window.firebaseFirestore = {
-            collection, addDoc, getDocs, doc, updateDoc, deleteDoc, orderBy, query, onSnapshot
-        };
-        window.firebaseStorage = {
-            ref, uploadBytes, getDownloadURL, uploadBytesResumable
-        };
+        // Initialize Supabase client
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        // Make Supabase available globally
+        window.supabaseClient = supabase;
+        
+        console.log('Supabase initialized successfully');
     </script>
 </head>
 <body>
@@ -1011,8 +970,8 @@
                             <p style="font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem;">ลากไฟล์ PDF มาวางที่นี่</p>
                             <p style="color: #666; margin-bottom: 1rem;">หรือ</p>
                             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center;">
-                                <button type="button" class="upload-btn" onclick="checkFirebaseConnection()" style="background: #059669;">
-                                    <i class="fas fa-plug"></i> ทดสอบ Firebase
+                                <button type="button" class="upload-btn" onclick="checkSupabaseConnection()" style="background: #059669;">
+                                    <i class="fas fa-plug"></i> ทดสอบ Supabase
                                 </button>
                                 <button type="button" class="upload-btn" onclick="document.getElementById('fileInput').click()">
                                     <i class="fas fa-folder-open"></i> เลือกไฟล์
@@ -1090,9 +1049,9 @@
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
             // ตรวจสอบ Firebase connection
-            checkFirebaseConnection();
+            checkSupabaseConnection();
             
-            loadDocumentsFromFirestore();
+            loadDocumentsFromSupabase();
             setupEventListeners();
             loadDraft(); // Load auto-saved draft if available
             
@@ -1101,62 +1060,73 @@
         });
 
         // ตรวจสอบการเชื่อมต่อ Firebase
-        function checkFirebaseConnection() {
-            setTimeout(async () => {
-                try {
-                    if (!window.db || !window.storage) {
-                        console.error('Firebase connection failed');
-                        alert('ไม่สามารถเชื่อมต่อ Firebase ได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต');
-                        return;
-                    }
-                    
-                    console.log('Firebase connected successfully');
-                    
-                    // ทดสอบการเชื่อมต่อ Firestore
-                    try {
-                        const { collection, getDocs } = window.firebaseFirestore;
-                        await getDocs(collection(db, 'test'));
-                        console.log('Firestore connection: OK');
-                    } catch (error) {
-                        console.error('Firestore connection failed:', error);
-                    }
-                    
-                    // ทดสอบการเชื่อมต่อ Storage
-                    try {
-                        const { ref } = window.firebaseStorage;
-                        ref(storage, 'test');
-                        console.log('Storage connection: OK');
-                    } catch (error) {
-                        console.error('Storage connection failed:', error);
-                    }
-                    
-                } catch (error) {
-                    console.error('Firebase initialization error:', error);
-                    alert('เกิดข้อผิดพลาดในการเชื่อมต่อ Firebase: ' + error.message);
+        async function checkSupabaseConnection() {
+            try {
+                console.log('=== Testing Supabase Connection ===');
+                
+                if (!window.supabaseClient) {
+                    alert('Supabase client ไม่พร้อมใช้งาน - กรุณาตรวจสอบการเชื่อมต่อ');
+                    return;
                 }
-            }, 3000);
+                
+                // ทดสอบการเชื่อมต่อฐานข้อมูล
+                const { data, error } = await window.supabaseClient
+                    .from('documents')
+                    .select('count', { count: 'exact', head: true });
+                
+                if (error) {
+                    console.error('Database connection failed:', error);
+                    alert('การเชื่อมต่อฐานข้อมูล Supabase ล้มเหลว: ' + error.message);
+                    return;
+                }
+                
+                console.log('Database connection: OK');
+                
+                // ทดสอบการเชื่อมต่อ Storage
+                try {
+                    const { data: buckets, error: storageError } = await window.supabaseClient.storage.listBuckets();
+                    
+                    if (storageError) {
+                        console.error('Storage connection failed:', storageError);
+                        alert('การเชื่อมต่อ Supabase Storage ล้มเหลว: ' + storageError.message);
+                    } else {
+                        console.log('Storage connection: OK');
+                        console.log('Available buckets:', buckets);
+                        alert('การเชื่อมต่อ Supabase สำเร็จ!\n✅ ฐานข้อมูล: เชื่อมต่อแล้ว\n✅ Storage: เชื่อมต่อแล้ว');
+                    }
+                } catch (storageError) {
+                    console.error('Storage test failed:', storageError);
+                    alert('การทดสอบ Storage ล้มเหลว แต่ฐานข้อมูลเชื่อมต่อได้');
+                }
+                
+            } catch (error) {
+                console.error('Supabase connection error:', error);
+                alert('เกิดข้อผิดพลาดในการเชื่อมต่อ Supabase: ' + error.message);
+            }
         }
 
         // Load documents from Firestore
-        async function loadDocumentsFromFirestore() {
+        async function loadDocumentsFromSupabase() {
             try {
-                const { collection, getDocs, orderBy, query } = window.firebaseFirestore;
-                const q = query(collection(db, 'documents'), orderBy('dateAdded', 'desc'));
-                const querySnapshot = await getDocs(q);
+                const { data, error } = await window.supabaseClient
+                    .from('documents')
+                    .select('*')
+                    .order('date_added', { ascending: false });
                 
-                documents = [];
-                querySnapshot.forEach((docSnapshot) => {
-                    documents.push({
-                        id: docSnapshot.id,
-                        ...docSnapshot.data()
-                    });
-                });
+                if (error) {
+                    console.error('Supabase error:', error);
+                    throw error;
+                }
+                
+                documents = data || [];
                 filteredDocuments = [...documents];
                 renderDocuments();
                 updateStats();
+                
+                console.log('Loaded', documents.length, 'documents from Supabase');
             } catch (error) {
-                console.error('Error loading documents:', error);
-                // Fallback to sample data if Firestore fails
+                console.error('Error loading documents from Supabase:', error);
+                // Fallback to sample data if Supabase fails
                 loadSampleData();
             }
         }
@@ -1341,23 +1311,21 @@
             showFilePreview(file);
             
             console.log('Starting upload process...');
-            await uploadToFirebase(file);
+            await uploadToSupabase(file);
         }
 
-        async function uploadToFirebase(file) {
+        async function uploadToSupabase(file) {
             try {
-                console.log('=== Starting Firebase Upload Process ===');
+                console.log('=== Starting Supabase Upload Process ===');
                 console.log('File details:', {
                     name: file.name,
                     size: file.size,
                     type: file.type
                 });
                 
-                const { ref, uploadBytesResumable, getDownloadURL } = window.firebaseStorage;
-                
-                // ตรวจสอบว่า Firebase Storage พร้อมใช้งาน
-                if (!storage) {
-                    throw new Error('Firebase Storage ไม่พร้อมใช้งาน');
+                // ตรวจสอบว่า Supabase client พร้อมใช้งาน
+                if (!window.supabaseClient) {
+                    throw new Error('Supabase client ไม่พร้อมใช้งาน');
                 }
                 
                 // สร้างชื่อไฟล์ที่ไม่ซ้ำกัน
@@ -1367,106 +1335,87 @@
                 
                 console.log('Upload filename:', fileName);
                 
-                // สร้าง reference ไปยัง storage
-                const storageRef = ref(storage, `documents/${fileName}`);
-                console.log('Storage reference created successfully');
+                // เริ่มการอัพโหลดไฟล์ไปยัง Supabase Storage
+                console.log('Starting upload to Supabase Storage...');
                 
-                // เริ่มการอัพโหลด
-                console.log('Starting upload task...');
-                const uploadTask = uploadBytesResumable(storageRef, file);
-                
-                // Promise wrapper สำหรับ upload task
-                return new Promise((resolve, reject) => {
-                    uploadTask.on('state_changed',
-                        // อัพเดทความคืบหน้า
-                        (snapshot) => {
-                            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                            console.log('Upload progress:', Math.round(progress) + '%');
+                const { data: uploadData, error: uploadError } = await window.supabaseClient.storage
+                    .from('documents') // ชื่อ bucket ใน Supabase Storage
+                    .upload(fileName, file, {
+                        onUploadProgress: (progress) => {
+                            const percentage = (progress.loaded / progress.total) * 100;
+                            console.log('Upload progress:', Math.round(percentage) + '%');
                             
                             const progressFill = document.getElementById('progressFill');
                             const progressText = document.getElementById('progressText');
                             
                             if (progressFill) {
-                                progressFill.style.width = `${progress}%`;
+                                progressFill.style.width = `${percentage}%`;
                             }
                             if (progressText) {
-                                progressText.textContent = `${Math.round(progress)}%`;
-                            }
-                        },
-                        // จัดการข้อผิดพลาด
-                        (error) => {
-                            console.error('=== Upload Error ===');
-                            console.error('Error code:', error.code);
-                            console.error('Error message:', error.message);
-                            console.error('Full error:', error);
-                            
-                            let errorMessage = 'เกิดข้อผิดพลาดในการอัพโหลด';
-                            
-                            switch (error.code) {
-                                case 'storage/unauthorized':
-                                    errorMessage = 'ไม่มีสิทธิ์ในการอัพโหลดไฟล์ - กรุณาตรวจสอบ Security Rules';
-                                    break;
-                                case 'storage/canceled':
-                                    errorMessage = 'การอัพโหลดถูกยกเลิก';
-                                    break;
-                                case 'storage/unknown':
-                                    errorMessage = 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ';
-                                    break;
-                                case 'storage/retry-limit-exceeded':
-                                    errorMessage = 'การอัพโหลดล้มเหลว - เครือข่ายไม่เสถียร';
-                                    break;
-                                default:
-                                    errorMessage = `เกิดข้อผิดพลาด: ${error.message}`;
-                            }
-                            
-                            alert(errorMessage);
-                            removeFile();
-                            reject(error);
-                        },
-                        // เมื่ออัพโหลดเสร็จ
-                        async () => {
-                            try {
-                                console.log('=== Upload Completed ===');
-                                console.log('Getting download URL...');
-                                
-                                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                                uploadedFileUrl = downloadURL;
-                                
-                                console.log('Download URL obtained:', downloadURL);
-                                
-                                const progressText = document.getElementById('progressText');
-                                const progressFill = document.getElementById('progressFill');
-                                
-                                if (progressText) progressText.textContent = 'อัพโหลดสำเร็จ!';
-                                if (progressFill) progressFill.style.background = '#10b981';
-                                
-                                // บันทึกข้อมูลไฟล์
-                                const fileData = {
-                                    name: file.name,
-                                    size: file.size,
-                                    type: file.type,
-                                    uploadedAt: new Date().toISOString(),
-                                    downloadURL
-                                };
-                                console.log('=== Upload Success ===');
-                                console.log('File data:', fileData);
-                                
-                                resolve(downloadURL);
-                                
-                            } catch (error) {
-                                console.error('Error getting download URL:', error);
-                                alert('เกิดข้อผิดพลาดในการรับ URL: ' + error.message);
-                                removeFile();
-                                reject(error);
+                                progressText.textContent = `${Math.round(percentage)}%`;
                             }
                         }
-                    );
-                });
+                    });
+                
+                if (uploadError) {
+                    console.error('=== Upload Error ===');
+                    console.error('Error:', uploadError);
+                    
+                    let errorMessage = 'เกิดข้อผิดพลาดในการอัพโหลด';
+                    
+                    switch (uploadError.error) {
+                        case 'Unauthorized':
+                            errorMessage = 'ไม่มีสิทธิ์ในการอัพโหลดไฟล์ - กรุณาตรวจสอบ RLS Policies';
+                            break;
+                        case 'PayloadTooLarge':
+                            errorMessage = 'ไฟล์มีขนาดใหญ่เกินไป';
+                            break;
+                        default:
+                            errorMessage = `เกิดข้อผิดพลาด: ${uploadError.message}`;
+                    }
+                    
+                    alert(errorMessage);
+                    removeFile();
+                    throw uploadError;
+                }
+                
+                console.log('=== Upload Completed ===');
+                console.log('Getting public URL...');
+                
+                // รับ public URL ของไฟล์ที่อัพโหลด
+                const { data: urlData } = window.supabaseClient.storage
+                    .from('documents')
+                    .getPublicUrl(fileName);
+                
+                const downloadURL = urlData.publicUrl;
+                uploadedFileUrl = downloadURL;
+                
+                console.log('Public URL obtained:', downloadURL);
+                
+                const progressText = document.getElementById('progressText');
+                const progressFill = document.getElementById('progressFill');
+                
+                if (progressText) progressText.textContent = 'อัพโหลดสำเร็จ!';
+                if (progressFill) progressFill.style.background = '#10b981';
+                
+                // บันทึกข้อมูลไฟล์
+                const fileData = {
+                    name: file.name,
+                    size: file.size,
+                    type: file.type,
+                    uploadedAt: new Date().toISOString(),
+                    downloadURL,
+                    storagePath: fileName
+                };
+                console.log('=== Upload Success ===');
+                console.log('File data:', fileData);
+                
+                return downloadURL;
                 
             } catch (error) {
-                console.error('=== Firebase Upload Setup Error ===');
+                console.error('=== Supabase Upload Error ===');
                 console.error('Error:', error);
-                alert('เกิดข้อผิดพลาดในการตั้งค่าการอัพโหลด: ' + error.message);
+                alert('เกิดข้อผิดพลาดในการอัพโหลด: ' + error.message);
                 removeFile();
                 throw error;
             }
@@ -1654,26 +1603,29 @@
             
             const formData = {
                 title: document.getElementById('docTitle').value,
-                receiptNo: document.getElementById('docReceiptNo').value,
-                docNumber: document.getElementById('docNumber').value,
-                year: document.getElementById('docYear').value,
+                receipt_no: document.getElementById('docReceiptNo').value,
+                doc_number: document.getElementById('docNumber').value,
+                year: parseInt(document.getElementById('docYear').value),
                 agency: document.getElementById('docAgency').value,
-                docType: document.getElementById('docType').value,
+                doc_type: document.getElementById('docType').value,
                 category: document.getElementById('docCategory').value,
                 link: uploadedFileUrl || driveLink,
-                isUploaded: !!uploadedFileUrl,
-                fileName: selectedFile ? selectedFile.name : null,
-                dateAdded: new Date().toISOString(),
-                lastModified: new Date().toISOString()
+                is_uploaded: !!uploadedFileUrl,
+                file_name: selectedFile ? selectedFile.name : null,
+                date_added: new Date().toISOString(),
+                last_modified: new Date().toISOString()
             };
 
             try {
-                const { collection, addDoc, doc, updateDoc } = window.firebaseFirestore;
-                
                 if (editingId) {
-                    // Update existing document in Firestore
-                    const docRef = doc(db, 'documents', editingId);
-                    await updateDoc(docRef, formData);
+                    // Update existing document in Supabase
+                    const { data, error } = await window.supabaseClient
+                        .from('documents')
+                        .update(formData)
+                        .eq('id', editingId)
+                        .select();
+                    
+                    if (error) throw error;
                     
                     // Update local array
                     const index = documents.findIndex(d => d.id === editingId);
@@ -1681,14 +1633,16 @@
                         documents[index] = { ...documents[index], ...formData };
                     }
                 } else {
-                    // Add new document to Firestore
-                    const docRef = await addDoc(collection(db, 'documents'), formData);
+                    // Add new document to Supabase
+                    const { data, error } = await window.supabaseClient
+                        .from('documents')
+                        .insert([formData])
+                        .select();
+                    
+                    if (error) throw error;
                     
                     // Add to local array
-                    const newDoc = {
-                        id: docRef.id,
-                        ...formData
-                    };
+                    const newDoc = data[0];
                     documents.push(newDoc);
                 }
 
@@ -1726,11 +1680,13 @@
             
             if (confirmed) {
                 try {
-                    const { doc, deleteDoc } = window.firebaseFirestore;
+                    // Delete from Supabase
+                    const { error } = await window.supabaseClient
+                        .from('documents')
+                        .delete()
+                        .eq('id', id);
                     
-                    // Delete from Firestore
-                    const docRef = doc(db, 'documents', id);
-                    await deleteDoc(docRef);
+                    if (error) throw error;
                     
                     // Remove from local array
                     const index = documents.findIndex(d => d.id === id);
