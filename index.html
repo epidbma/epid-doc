@@ -1130,35 +1130,34 @@
                     alert('การทดสอบ Storage ล้มเหลว แต่ฐานข้อมูลเชื่อมต่อได้');
                 }
                 
-            } catch (error) {
-                console.error('Supabase connection error:', error);
-                alert('เกิดข้อผิดพลาดในการเชื่อมต่อ Supabase: ' + error.message);
-            }
-        }
-
-        // Load documents from Firestore
-        async function loadDocumentsFromSupabase() {
             try {
+                console.log('=== Testing Supabase Connection ===');
+                if (!window.supabaseClient) {
+                    return;
+                }
+                // ทดสอบการเชื่อมต่อฐานข้อมูล
                 const { data, error } = await window.supabaseClient
                     .from('documents')
-                    .select('*')
-                    .order('date_added', { ascending: false });
-                
+                    .select('count', { count: 'exact', head: true });
                 if (error) {
-                    console.error('Supabase error:', error);
-                    throw error;
+                    console.error('Database connection failed:', error);
+                    return;
                 }
-                
-                documents = data || [];
-                filteredDocuments = [...documents];
-                renderDocuments();
-                updateStats();
-                
-                console.log('Loaded', documents.length, 'documents from Supabase');
+                console.log('Database connection: OK');
+                // ทดสอบการเชื่อมต่อ Storage
+                try {
+                    const { data: buckets, error: storageError } = await window.supabaseClient.storage.listBuckets();
+                    if (storageError) {
+                        console.error('Storage connection failed:', storageError);
+                    } else {
+                        console.log('Storage connection: OK');
+                        console.log('Available buckets:', buckets);
+                    }
+                } catch (storageError) {
+                    console.error('Storage test failed:', storageError);
+                }
             } catch (error) {
-                console.error('Error loading documents from Supabase:', error);
-                // Fallback to sample data if Supabase fails
-                loadSampleData();
+                console.error('Supabase connection error:', error);
             }
         }
 
@@ -1808,13 +1807,7 @@
         });
         
         // เพิ่ม Auto-save ร่าง
-        const formInputs = document.querySelectorAll('.form-input');
-        formInputs.forEach(input => {
-            input.addEventListener('change', () => {
-                const formData = getFormData();
-                localStorage.setItem('documentDraft', JSON.stringify(formData));
-            });
-        });
+        // (duplicate removed)
 
         // ฟังก์ชันสำหรับดึงข้อมูลฟอร์ม
         function getFormData() {
@@ -1900,11 +1893,7 @@
             return () => subscription.unsubscribe();
         }
         
-        // เพิ่มฟังก์ชันแสดงคีย์ลัด
-        function toggleShortcutHelper() {
-            const helper = document.getElementById('shortcutHelper');
-            helper.style.display = helper.style.display === 'none' ? 'block' : 'none';
-        }
+        // ...removed shortcut helper function...
     </script>
 </body>
 </html>
@@ -2843,43 +2832,19 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">ปีงบประมาณ *</label>
-                    <select class="form-input" id="docYear" required>
-                        <option value="">เลือกปีงบประมาณ</option>
-                        <option value="2567">2567</option>
-                        <option value="2566">2566</option>
-                        <option value="2565">2565</option>
-                        <option value="2564">2564</option>
-                    </select>
+                    <input type="text" class="form-input" id="docYear" required placeholder="เช่น 2567">
                 </div>
                 <div class="form-group">
                     <label class="form-label">หน่วยงาน *</label>
-                    <select class="form-input" id="docAgency" required>
-                        <option value="">เลือกหน่วยงาน</option>
-                        <option value="สำนักงานเขต">สำนักงานเขต</option>
-                        <option value="กรมการแพทย์">กรมการแพทย์</option>
-                        <option value="สำนักการศึกษา">สำนักการศึกษา</option>
-                        <option value="สำนักงานนโยบายและแผน">สำนักงานนโยบายและแผน</option>
-                    </select>
+                    <input type="text" class="form-input" id="docAgency" required placeholder="เช่น สำนักงานเขต">
                 </div>
                 <div class="form-group">
                     <label class="form-label">ประเภทเอกสาร *</label>
-                    <select class="form-input" id="docType" required>
-                        <option value="">เลือกประเภทเอกสาร</option>
-                        <option value="หนังสือขาเข้า">หนังสือขาเข้า</option>
-                        <option value="หนังสือขาออก">หนังสือขาออก</option>
-                        <option value="เอกสารภายใน">เอกสารภายใน</option>
-                    </select>
+                    <input type="text" class="form-input" id="docType" required placeholder="เช่น หนังสือขาเข้า">
                 </div>
                 <div class="form-group">
                     <label class="form-label">หมวดหมู่ *</label>
-                    <select class="form-input" id="docCategory" required>
-                        <option value="">เลือกหมวดหมู่</option>
-                        <option value="คำสั่ง">คำสั่ง</option>
-                        <option value="ประกาศ">ประกาศ</option>
-                        <option value="หนังสือราชการ">หนังสือราชการ</option>
-                        <option value="รายงาน">รายงาน</option>
-                        <option value="แผนงาน">แผนงาน</option>
-                    </select>
+                    <input type="text" class="form-input" id="docCategory" required placeholder="เช่น คำสั่ง">
                 </div>
                 <div class="form-group">
                     <label class="form-label">อัปโหลดไฟล์ PDF หรือใส่ลิงก์</label>
@@ -2947,23 +2912,7 @@
         </div>
     </div>
 
-    <!-- เพิ่ม keyboard shortcuts helper -->
-    <div id="shortcutHelper" class="shortcut-helper">
-        <div class="shortcut-list">
-            <div class="shortcut-item">
-                <kbd>Ctrl/⌘</kbd> + <kbd>N</kbd>
-                <span>เพิ่มเอกสารใหม่</span>
-            </div>
-            <div class="shortcut-item">
-                <kbd>Ctrl/⌘</kbd> + <kbd>F</kbd>
-                <span>ค้นหาเอกสาร</span>
-            </div>
-            <div class="shortcut-item">
-                <kbd>Esc</kbd>
-                <span>ปิดหน้าต่าง</span>
-            </div>
-        </div>
-    </div>
+    <!-- ...shortcut helper removed... -->
 
     <script>
         // File upload variables
